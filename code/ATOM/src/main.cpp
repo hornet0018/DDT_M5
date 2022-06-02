@@ -3,10 +3,28 @@
 char cmdbuf[CMDMAX];
 unsigned char cmdbuf_n = 0;
 
+// CAN送信ループ100ms間隔
+void task0(void *arg)
+{
+  while (true)
+  {
+    if (Serial2.available())
+    {
+      uint8_t data = Serial2.read();
+      Serial.print(data, HEX);
+      Serial.print(",");
+      delay(100);
+    }
+    delay(1);
+  }
+}
+
 void setup()
 {
   Serial.begin(115200);
   Serial2.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);
+
+  xTaskCreatePinnedToCore(task0, "Task0", 4096, NULL, 1, NULL, 0); // create tasks
 }
 
 void loop()
@@ -26,6 +44,7 @@ void cmd_chk(void)
       Serial.print("\r\n");
       Serial.print("command error.\r\n");
       buf_clr();
+      Serial.print(">");
     }
     else
     {
@@ -102,6 +121,19 @@ void cmd_chk(void)
 
           Serial2.write(send_data, 10);
         }
+        else if (strncmp(cmdbuf, "getmotor", 8) == 0)
+        {
+          byte data[9] = {0x01, 0x74, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+          // CRC計算
+          uint8_t result8 = crcx::crc8(data, 9, ht::util::crc::Crc8::MAXIM);
+
+          //送信データ
+          byte send_data[10] = {
+              data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], result8};
+
+          Serial2.write(send_data, 10);
+        }
 
         else
         {
@@ -110,6 +142,7 @@ void cmd_chk(void)
             Serial.printf("command syntax error.\r\n");
           }
         }
+        Serial.print(">");
         buf_clr();
       }
       else if (c == '\b')
